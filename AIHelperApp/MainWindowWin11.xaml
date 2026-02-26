@@ -9,7 +9,12 @@
         WindowStartupLocation="CenterScreen"
         KeyDown="Window_KeyDown"
         ExtendsContentIntoTitleBar="True"
-        WindowBackdropType="Mica">
+        WindowBackdropType="Acrylic">
+
+    <!-- Полупрозрачный фон поверх Acrylic blur -->
+    <ui:FluentWindow.Background>
+        <SolidColorBrush Color="#1e1e2e" Opacity="0.45"/>
+    </ui:FluentWindow.Background>
 
     <Grid Background="Transparent">
         <Grid.RowDefinitions>
@@ -17,8 +22,9 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Нативный TitleBar WPF UI — интегрируется с Mica -->
-        <ui:TitleBar Grid.Row="0" Title="🤖 AI Helper"/>
+        <ui:TitleBar Grid.Row="0" Title="🤖 AI Helper"
+                     Background="Transparent"
+                     Foreground="#cdd6f4"/>
 
         <controls:MainContent Grid.Row="1" x:Name="ContentArea"/>
     </Grid>

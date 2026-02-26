@@ -1,6 +1,6 @@
 ﻿using System.Windows;
-
-using AIHelperApp.Misc;
+using AIHelperApp.Helpers;
+using Wpf.Ui.Controls;
 
 namespace AIHelperApp
 {
@@ -12,12 +12,18 @@ namespace AIHelperApp
 
             if (OsHelper.IsWindows11)
             {
-                // Mica + FluentWindow + скруглённые углы
-                mainWindow = new MainWindowWin11();
+                var win11 = new MainWindowWin11();
+
+                // На 22H2+ — Acrylic (красивый blur)
+                // На 21H2  — Mica (лёгкая прозрачность)
+                win11.WindowBackdropType = OsHelper.IsWindows11_22H2
+                    ? WindowBackdropType.Acrylic
+                    : WindowBackdropType.Mica;
+
+                mainWindow = win11;
             }
             else
             {
-                // Acrylic Blur для Windows 10
                 mainWindow = new MainWindowWin10();
             }
 

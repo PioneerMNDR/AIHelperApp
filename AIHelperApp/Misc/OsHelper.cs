@@ -1,34 +1,37 @@
 ﻿using Microsoft.Win32;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace AIHelperApp.Misc
+namespace AIHelperApp.Helpers
 {
     public static class OsHelper
     {
-        private static readonly Lazy<bool> _isWin11 = new(() => DetectWindows11());
+        private static readonly Lazy<int> _build = new(() => GetBuildNumber());
 
-        public static bool IsWindows11 => _isWin11.Value;
+        public static bool IsWindows11 => _build.Value >= 22000;
+        public static bool IsWindows11_22H2 => _build.Value >= 22621;  // Tabbed Mica
 
-        private static bool DetectWindows11()
+        /// <summary>Лучший тип backdrop для текущей ОС.</summary>
+        public static string RecommendedBackdrop
+        {
+            get
+            {
+                if (_build.Value >= 22621) return "Acrylic";   // Win 11 22H2+
+                if (_build.Value >= 22000) return "Mica";      // Win 11 21H2
+                return "None";                                  // Win 10
+            }
+        }
+
+        private static int GetBuildNumber()
         {
             try
             {
-                // Надёжный способ — через реестр (работает и на .NET Framework)
                 using var key = Registry.LocalMachine.OpenSubKey(
                     @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
-
-                var buildStr = key?.GetValue("CurrentBuildNumber")?.ToString();
-                if (int.TryParse(buildStr, out int build))
-                    return build >= 22000;   // Win 11 начинается с build 22000
+                var s = key?.GetValue("CurrentBuildNumber")?.ToString();
+                if (int.TryParse(s, out int b)) return b;
             }
             catch { }
-
-            // Fallback
-            return Environment.OSVersion.Version.Build >= 22000;
+            return Environment.OSVersion.Version.Build;
         }
     }
 }
