@@ -1,0 +1,25 @@
+﻿<ui:FluentWindow x:Class="AIHelperApp.MainWindowWin11"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:controls="clr-namespace:AIHelperApp.Controls"
+        Title="AI Helper"
+        Width="950" Height="750"
+        MinWidth="650" MinHeight="550"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="Window_KeyDown"
+        ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="Mica">
+
+    <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Нативный TitleBar WPF UI — интегрируется с Mica -->
+        <ui:TitleBar Grid.Row="0" Title="🤖 AI Helper"/>
+
+        <controls:MainContent Grid.Row="1" x:Name="ContentArea"/>
+    </Grid>
+</ui:FluentWindow>
