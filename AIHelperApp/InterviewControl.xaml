@@ -31,6 +31,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <!-- AI Провайдер -->
                 </Grid.RowDefinitions>
 
                 <!-- Роль -->
@@ -92,6 +94,87 @@
                                Margin="0,0,0,4"/>
                     <ComboBox x:Name="LoopbackComboBox"/>
                 </StackPanel>
+
+                <!-- ROW 3: Выбор AI провайдера -->
+                <Border Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" 
+        Margin="0,8,0,0" Padding="12,10"
+        Background="{ui:ThemeResource ControlFillColorDefaultBrush}"
+        CornerRadius="6"
+        BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+        BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Заголовок -->
+                        <TextBlock Grid.Row="0" Grid.ColumnSpan="3" 
+                   Text="🤖 AI Провайдер" 
+                   FontSize="12" FontWeight="SemiBold"
+                   Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" 
+                   Margin="0,0,0,8"/>
+
+                        <!-- Выбор провайдера -->
+                        <ComboBox x:Name="AiProviderComboBox" 
+                  Grid.Row="1" Grid.Column="0"
+                  MinWidth="180" 
+                  SelectionChanged="AiProviderComboBox_SelectionChanged">
+                            <ComboBoxItem Content="🏠 Qwen Free API (локальный)" Tag="QwenFreeApi"/>
+                            <ComboBoxItem Content="☁️ OpenRouter (облако)" Tag="OpenRouter"/>
+                        </ComboBox>
+
+                        <!-- Контейнер для настроек (фиксированная ширина) -->
+                        <Grid Grid.Row="1" Grid.Column="1" Margin="12,0,8,0">
+
+                            <!-- Настройки Qwen -->
+                            <StackPanel x:Name="QwenSettingsPanel" 
+                        Orientation="Horizontal">
+                                <TextBlock Text="URL:" FontSize="11" 
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ui:TextBox x:Name="QwenUrlTextBox"
+                            Text="http://localhost:3264"
+                            Width="200"
+                            PlaceholderText="http://localhost:3264"/>
+                            </StackPanel>
+
+                            <!-- Настройки OpenRouter -->
+                            <StackPanel x:Name="OpenRouterSettingsPanel" 
+                        Orientation="Horizontal"
+                        Visibility="Collapsed">
+                                <TextBlock Text="API Key:" FontSize="11" 
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ui:PasswordBox x:Name="OpenRouterApiKeyBox"
+                                Width="180"
+                                PlaceholderText="sk-or-v1-..."
+                                PasswordChanged="OpenRouterApiKeyBox_PasswordChanged"/>
+
+                                <TextBlock Text="Модель:" FontSize="11" 
+                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                           VerticalAlignment="Center" Margin="12,0,6,0"/>
+                                <ComboBox x:Name="OpenRouterModelComboBox" 
+                          Width="160"
+                          SelectionChanged="OpenRouterModelComboBox_SelectionChanged"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Кнопка теста -->
+                        <ui:Button Grid.Row="1" Grid.Column="2"
+                   x:Name="TestConnectionButton"
+                   Content="Тест"
+                   Icon="{ui:SymbolIcon Checkmark24}"
+                   Appearance="Secondary"
+                   Click="TestConnection_Click"
+                   ToolTipService.ToolTip="Проверить подключение"/>
+                    </Grid>
+                </Border>
 
                 <!-- Свернуть настройки -->
                 <ui:Button Grid.Row="0" Grid.Column="2"
@@ -564,9 +647,9 @@
 
                         <Border Width="1" Background="{ui:ThemeResource ControlStrokeColorDefaultBrush}" Margin="0,2,12,2"/>
 
-                        <!-- Обновлённый Qwen статус -->
+                        <!-- Обновлённый LLM статус -->
                         <TextBlock FontSize="11" VerticalAlignment="Center">
-            <Run Text="Qwen:" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"/>
+            <Run Text="LLM:" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"/>
             <Run x:Name="QwenStatusRun" Text=" —" Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"/>
                         </TextBlock>
                     </StackPanel>

@@ -8,6 +8,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.IO;
+using System.Net.Http;
+using System.Text.Json;
 namespace AIHelperApp.Controls
 {
     public partial class InterviewControl : UserControl
@@ -34,7 +36,7 @@ namespace AIHelperApp.Controls
         // ═══ Auto-trigger state ═══
         private bool _autoTriggerFired;
         private SpeakerType _lastSegmentSpeaker;
-
+        private AiProviderSettings _aiSettings;
         // ═══ AI Request state ═══
         private CancellationTokenSource _aiCancellationSource;
         private bool _isAiRequestInProgress;
@@ -88,7 +90,11 @@ namespace AIHelperApp.Controls
             _audioService = new AudioCaptureService();
             _whisperService = new WhisperTranscriptionService();
             _screenshotService = new ScreenshotService();
-            _aiService = new InterviewAiService();
+
+            // ═══ Загрузка сохранённых настроек ═══
+            _aiSettings = AiProviderSettings.Load();
+            _aiService = new InterviewAiService(_aiSettings);
+
             _session = new InterviewSession();
 
             TranscriptionItemsControl.ItemsSource = _session.Segments;
@@ -105,8 +111,249 @@ namespace AIHelperApp.Controls
             EnumerateDevices();
             CheckWhisperModel();
 
-            // ═══ ИЗМЕНЕНО: просто инициализируем, чаты создаются лениво ═══
+            // ═══ Инициализация UI настроек провайдера ═══
+            InitializeAiProviderUI();
+
             await _aiService.InitializeAsync();
+        }
+
+        private void InitializeAiProviderUI()
+        {
+            // Заполняем ComboBox моделей OpenRouter
+            OpenRouterModelComboBox.Items.Clear();
+            foreach (var (id, name) in OpenRouterModels.FreeModels)
+            {
+                OpenRouterModelComboBox.Items.Add(new ComboBoxItem { Content = name, Tag = id });
+            }
+
+            // Устанавливаем сохранённые значения
+            AiProviderComboBox.SelectedIndex = _aiSettings.IsOpenRouterProvider ? 1 : 0;
+            QwenUrlTextBox.Text = _aiSettings.QwenApiUrl;
+            OpenRouterApiKeyBox.Password = _aiSettings.OpenRouterApiKey;
+
+            // Выбираем сохранённую модель OpenRouter
+            for (int i = 0; i < OpenRouterModelComboBox.Items.Count; i++)
+            {
+                if (OpenRouterModelComboBox.Items[i] is ComboBoxItem item &&
+                    item.Tag?.ToString() == _aiSettings.OpenRouterTextModel)
+                {
+                    OpenRouterModelComboBox.SelectedIndex = i;
+                    break;
+                }
+            }
+            if (OpenRouterModelComboBox.SelectedIndex < 0)
+                OpenRouterModelComboBox.SelectedIndex = 0;
+
+            UpdateProviderUI();
+            UpdateAiStatusDisplay();
+        }
+        private void AiProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isInitialized) return;
+
+            if (AiProviderComboBox.SelectedItem is ComboBoxItem item)
+            {
+                var providerTag = item.Tag?.ToString();
+                _aiSettings.ProviderType = providerTag == "OpenRouter"
+                    ? AiProviderType.OpenRouter
+                    : AiProviderType.QwenFreeApi;
+
+                UpdateProviderUI();
+                ApplyAndSaveSettings();
+            }
+        }
+        private void OpenRouterModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isInitialized) return;
+
+            if (OpenRouterModelComboBox.SelectedItem is ComboBoxItem modelItem)
+            {
+                var modelId = modelItem.Tag?.ToString();
+                if (!string.IsNullOrEmpty(modelId))
+                {
+                    _aiSettings.OpenRouterTextModel = modelId;
+                    ApplyAndSaveSettings();
+                }
+            }
+        }
+
+        private void UpdateProviderUI()
+        {
+            if (QwenSettingsPanel == null || OpenRouterSettingsPanel == null) return;
+
+            if (_aiSettings.IsOpenRouterProvider)
+            {
+                QwenSettingsPanel.Visibility = Visibility.Collapsed;
+                OpenRouterSettingsPanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                QwenSettingsPanel.Visibility = Visibility.Visible;
+                OpenRouterSettingsPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void OpenRouterApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (!_isInitialized) return;
+
+            if (sender is Wpf.Ui.Controls.PasswordBox pb)
+            {
+                _aiSettings.OpenRouterApiKey = pb.Password;
+                // Не сохраняем при каждом изменении символа, только при потере фокуса
+            }
+        }
+        private void ApplyAndSaveSettings()
+        {
+            // Обновляем URL Qwen
+            _aiSettings.QwenApiUrl = QwenUrlTextBox.Text;
+
+            // Применяем к сервису (это также сохраняет настройки)
+            _aiService?.UpdateSettings(_aiSettings);
+
+            UpdateAiStatusDisplay();
+        }
+
+        private void UpdateAiStatusDisplay()
+        {
+            if (_aiSettings.IsOpenRouterProvider)
+            {
+                var modelName = "OpenRouter";
+                if (OpenRouterModelComboBox.SelectedItem is ComboBoxItem item)
+                {
+                    modelName = item.Content?.ToString() ?? "OpenRouter";
+                }
+                QwenStatusRun.Text = $" {modelName}";
+                QwenStatusRun.Foreground = _aiSettings.HasOpenRouterApiKey ? BrushBlue : BrushYellow;
+            }
+            else
+            {
+                QwenStatusRun.Text = " Qwen";
+                QwenStatusRun.Foreground = BrushBlue;
+            }
+        }
+  
+
+        private async void TestConnection_Click(object sender, RoutedEventArgs e)
+        {
+            // Сначала сохраняем текущие настройки
+            ApplyAndSaveSettings();
+
+            var button = sender as Wpf.Ui.Controls.Button;
+            var originalContent = button.Content;
+            button.Content = "...";
+            button.IsEnabled = false;
+
+            try
+            {
+                if (_aiSettings.IsOpenRouterProvider)
+                {
+                    if (!_aiSettings.HasOpenRouterApiKey)
+                    {
+                        MessageBox.Show("Введите API ключ OpenRouter", "Ошибка",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    using var client = new HttpClient();
+                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {_aiSettings.OpenRouterApiKey}");
+                    client.Timeout = TimeSpan.FromSeconds(10);
+
+                    var response = await client.GetAsync("https://openrouter.ai/api/v1/models");
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        MessageBox.Show("✅ Подключение к OpenRouter успешно!", "Успех",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                        QwenStatusRun.Text = " OpenRouter ✓";
+                        QwenStatusRun.Foreground = BrushGreen;
+                    }
+                    else
+                    {
+                        var error = await response.Content.ReadAsStringAsync();
+                        MessageBox.Show($"❌ Ошибка: {response.StatusCode}\n{error}", "Ошибка",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                        QwenStatusRun.Foreground = BrushRed;
+                    }
+                }
+                else
+                {
+                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                    var response = await client.GetAsync($"{_aiSettings.QwenApiUrl.TrimEnd('/')}/api/models");
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        MessageBox.Show("✅ Подключение к Qwen API успешно!", "Успех",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                        QwenStatusRun.Text = " Qwen ✓";
+                        QwenStatusRun.Foreground = BrushGreen;
+                    }
+                    else
+                    {
+                        MessageBox.Show($"❌ Ошибка: {response.StatusCode}", "Ошибка",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                        QwenStatusRun.Foreground = BrushRed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"❌ Ошибка подключения:\n{ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                QwenStatusRun.Text = _aiSettings.IsOpenRouterProvider ? " OpenRouter ✗" : " Qwen ✗";
+                QwenStatusRun.Foreground = BrushRed;
+            }
+            finally
+            {
+                button.Content = originalContent;
+                button.IsEnabled = true;
+            }
+        }
+
+        // Опционально: сохранение/загрузка настроек
+        private AiProviderSettings LoadAiSettings()
+        {
+            try
+            {
+                var settingsPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "AIHelperApp",
+                    "ai_settings.json");
+
+                if (File.Exists(settingsPath))
+                {
+                    var json = File.ReadAllText(settingsPath);
+                    return JsonSerializer.Deserialize<AiProviderSettings>(json) ?? new AiProviderSettings();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Settings] Failed to load: {ex.Message}");
+            }
+
+            return new AiProviderSettings();
+        }
+
+        private void SaveAiSettings()
+        {
+            try
+            {
+                var settingsDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "AIHelperApp");
+
+                Directory.CreateDirectory(settingsDir);
+
+                var settingsPath = Path.Combine(settingsDir, "ai_settings.json");
+                var json = JsonSerializer.Serialize(_aiSettings, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(settingsPath, json);
+
+                Debug.WriteLine("[Settings] AI settings saved");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Settings] Failed to save: {ex.Message}");
+            }
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -135,7 +382,12 @@ namespace AIHelperApp.Controls
 
             _audioService?.Dispose();
             _audioService = null;
-
+            // Сохраняем API ключ если он был изменён
+            if (_aiSettings != null && OpenRouterApiKeyBox != null)
+            {
+                _aiSettings.OpenRouterApiKey = OpenRouterApiKeyBox.Password;
+                _aiSettings.Save();
+            }
             if (_interviewerVad != null)
             {
                 _interviewerVad.SpeechSegmentCompleted -= OnInterviewerSegmentCompleted;
@@ -165,7 +417,7 @@ namespace AIHelperApp.Controls
                 _aiService.Dispose();
                 _aiService = null;
             }
-
+            SaveAiSettings();
             _screenshotService?.Dispose();
             _screenshotService = null;
         }
@@ -858,24 +1110,37 @@ namespace AIHelperApp.Controls
 
                 // Цвет в зависимости от статуса
                 if (status.Contains("ошибка") || status.Contains("отменён"))
-                    QwenStatusRun.Foreground = BrushRed;
-                else if (status.Contains("генерирую"))
-                    QwenStatusRun.Foreground = BrushYellow;
-                else if (status == "готов")
-                    QwenStatusRun.Foreground = BrushGreen;
-                else
-                    QwenStatusRun.Foreground = BrushSubtext;
-
-                // Показываем/скрываем индикатор генерации
-                if (status == "генерирую...")
                 {
+                    QwenStatusRun.Foreground = BrushRed;
+                    GeneratingIndicator.Visibility = Visibility.Collapsed;
+                }
+                else if (status == "rate limit")
+                {
+                    QwenStatusRun.Foreground = BrushYellow;
+                    QwenStatusRun.Text = " ⏳ rate limit";
+                    GeneratingIndicator.Visibility = Visibility.Collapsed;
+                }
+                else if (status.Contains("генерирую") || status.Contains("повтор"))
+                {
+                    QwenStatusRun.Foreground = BrushYellow;
                     GeneratingIndicator.Visibility = Visibility.Visible;
                     _session.IsGenerating = true;
                 }
-                else
+                else if (status.Contains("ожидание"))
                 {
+                    QwenStatusRun.Foreground = BrushYellow;
+                    GeneratingIndicator.Visibility = Visibility.Visible;
+                }
+                else if (status == "готов")
+                {
+                    QwenStatusRun.Foreground = BrushGreen;
                     GeneratingIndicator.Visibility = Visibility.Collapsed;
                     _session.IsGenerating = false;
+                }
+                else
+                {
+                    QwenStatusRun.Foreground = BrushSubtext;
+                    GeneratingIndicator.Visibility = Visibility.Collapsed;
                 }
             });
         }
@@ -924,9 +1189,6 @@ namespace AIHelperApp.Controls
         //  AI TRIGGER
         // ═══════════════════════════════════════════
 
-        /// <summary>
-        /// Запускает запрос к AI (вызывается по F2, кнопке или автотриггеру)
-        /// </summary>
         /// <summary>
         /// Запускает запрос к AI (вызывается по F2, кнопке или автотриггеру)
         /// </summary>
