@@ -5,24 +5,19 @@ using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data;
+using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
-using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using Wpf.Ui.Controls;
 
-namespace AIHelperApp
+namespace AIHelperApp.Controls
 {
-    public partial class ChatWindow : TianXiaTech.BlurWindow
+    public partial class ChatControl : UserControl
     {
-        // ═══ Services ═══
         private readonly LLMApiService _apiService;
         private readonly FileUploadService _fileUploadService;
         private readonly ObservableCollection<ChatMessageViewModel> _messages;
@@ -33,11 +28,10 @@ namespace AIHelperApp
         private DispatcherTimer _loadingTimer;
         private int _dotCount;
 
-        // ═══ Stealth Mode ═══
-        private IntPtr _hwnd;
-        private bool _isHidden = true;
+        // ═══ Флаг инициализации ═══
+        private bool _isInitialized;
 
-        public ChatWindow()
+        public ChatControl()
         {
             InitializeComponent();
 
@@ -54,107 +48,37 @@ namespace AIHelperApp
             _loadingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _loadingTimer.Tick += LoadingTimer_Tick;
 
-            Loaded += ChatWindow_Loaded;
-            Closing += ChatWindow_Closing;
+            Loaded += ChatControl_Loaded;
+            // НЕ подписываемся на Unloaded — ресурсы освобождаются только при закрытии приложения
         }
 
-        private async void ChatWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void ChatControl_Loaded(object sender, RoutedEventArgs e)
         {
-            _hwnd = new WindowInteropHelper(this).Handle;
-            ApplyStealthProtection(_isHidden);
-            UpdateStealthUI();
+            // Инициализируем только один раз
+            if (_isInitialized)
+                return;
+
+            _isInitialized = true;
 
             await LoadModelsAsync();
             await CheckStatusAsync();
 
             _apiService.SetSystemPrompt(SystemPromptTextBox.Text);
 
-            AddMessage("assistant", "Привет! Я AI-ассистент. Можете прикрепить файлы (изображения, аудио, документы) кнопкой 📎 или перетащить их в окно.\n\nЯ поддерживаю **Markdown** форматирование:\n- `код`\n- **жирный**\n- *курсив*\n- списки и таблицы");
+            AddMessage("assistant", "Привет! Я AI-ассистент. Прикрепляйте файлы кнопкой 📎 или перетаскивайте их.\n\n**Markdown** поддерживается: `код`, *курсив*, **жирный**");
         }
 
-        private void ChatWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        /// <summary>
+        /// Освобождение ресурсов — вызывается из MainWindow при закрытии приложения
+        /// </summary>
+        public void Cleanup()
         {
             _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource?.Dispose();
             _apiService?.Dispose();
             _fileUploadService?.Dispose();
             _loadingTimer?.Stop();
         }
-
-        #region ═══ STEALTH MODE ═══
-
-        private void StealthToggle_Click(object sender, MouseButtonEventArgs e)
-        {
-            e.Handled = true;
-            ToggleStealth();
-        }
-
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.OemTilde && Keyboard.Modifiers == ModifierKeys.Control)
-            {
-                ToggleStealth();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Oem3 && Keyboard.Modifiers == ModifierKeys.Control)
-            {
-                ToggleStealth();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
-            {
-                AttachFile_Click(null, null);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control
-                     && !InputTextBox.IsFocused)
-            {
-                PasteFromClipboard();
-                e.Handled = true;
-            }
-        }
-
-        private void ToggleStealth()
-        {
-            _isHidden = !_isHidden;
-            ApplyStealthProtection(_isHidden);
-
-            var storyboard = (Storyboard)FindResource(_isHidden ? "ToggleOn" : "ToggleOff");
-            storyboard.Begin(this);
-
-            UpdateStealthUI();
-        }
-
-        private void ApplyStealthProtection(bool hide)
-        {
-            if (_hwnd == IntPtr.Zero) return;
-
-            uint flag = hide
-                ? NativeMethods.WDA_EXCLUDEFROMCAPTURE
-                : NativeMethods.WDA_NONE;
-
-            if (!NativeMethods.SetWindowDisplayAffinity(_hwnd, flag) && hide)
-            {
-                NativeMethods.SetWindowDisplayAffinity(_hwnd, NativeMethods.WDA_MONITOR);
-            }
-        }
-
-        private void UpdateStealthUI()
-        {
-            if (_isHidden)
-            {
-                StealthIcon.Text = "🔒";
-                StealthStatusText.Text = "Скрыто";
-                StealthStatusText.Foreground = (System.Windows.Media.Brush)FindResource("GreenBrush");
-            }
-            else
-            {
-                StealthIcon.Text = "👁";
-                StealthStatusText.Text = "Видимо";
-                StealthStatusText.Foreground = (System.Windows.Media.Brush)FindResource("RedBrush");
-            }
-        }
-
-        #endregion
 
         #region ═══ MODEL & STATUS ═══
 
@@ -182,10 +106,9 @@ namespace AIHelperApp
                     ModelComboBox.Items.Add("qwen-max-latest");
                     ModelComboBox.Items.Add("qwen3-max");
                     ModelComboBox.Items.Add("qwen3-coder-plus");
-                    ModelComboBox.Items.Add("qwq-32b");
                     ModelComboBox.SelectedIndex = 0;
                 });
-                UpdateStatus("⚠️ Модели загружены локально", false);
+                UpdateStatus("Модели загружены локально", false);
             }
         }
 
@@ -196,11 +119,11 @@ namespace AIHelperApp
                 var status = await _apiService.GetStatusAsync();
                 var okCount = status.Accounts?.FindAll(a => a.Status == "OK").Count ?? 0;
                 var total = status.Accounts?.Count ?? 0;
-                UpdateStatus($"✅ Подключено ({okCount}/{total})", true);
+                UpdateStatus($"Подключено ({okCount}/{total})", true);
             }
             catch
             {
-                UpdateStatus("❌ Нет подключения", false);
+                UpdateStatus("Нет подключения", false);
             }
         }
 
@@ -209,7 +132,7 @@ namespace AIHelperApp
             Dispatcher.Invoke(() =>
             {
                 StatusText.Text = text;
-                StatusText.Foreground = ok
+                StatusIndicator.Fill = ok
                     ? (System.Windows.Media.Brush)FindResource("GreenBrush")
                     : (System.Windows.Media.Brush)FindResource("RedBrush");
             });
@@ -265,7 +188,7 @@ namespace AIHelperApp
             {
                 Filter = FileUploadService.GetFileDialogFilter(),
                 Multiselect = true,
-                Title = "Выберите файлы для прикрепления"
+                Title = "Выберите файлы"
             };
 
             if (dialog.ShowDialog() == true)
@@ -304,7 +227,7 @@ namespace AIHelperApp
 
         private void RemoveAttachment_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is System.Windows.Controls.Button btn && btn.Tag is AttachedFile attachment)
+            if (sender is Button btn && btn.Tag is AttachedFile attachment)
             {
                 _pendingAttachments.Remove(attachment);
             }
@@ -368,7 +291,7 @@ namespace AIHelperApp
 
                 Dispatcher.Invoke(() =>
                 {
-                    UploadProgressText.Text = $"Загрузка {uploaded + 1}/{total}: {attachment.Name}";
+                    UploadProgressText.Text = $"Загрузка {uploaded + 1}/{total}";
                 });
 
                 var progress = new Progress<double>(p =>
@@ -399,8 +322,7 @@ namespace AIHelperApp
                 }
                 else
                 {
-                    attachment.ErrorMessage = result.Error ?? "Неизвестная ошибка";
-                    System.Diagnostics.Debug.WriteLine($"❌ Upload failed: {attachment.Name} - {result.Error}");
+                    attachment.ErrorMessage = result.Error ?? "Ошибка загрузки";
                 }
             }
 
@@ -416,7 +338,7 @@ namespace AIHelperApp
 
         #region ═══ DRAG & DROP ═══
 
-        private void Window_DragOver(object sender, DragEventArgs e)
+        private void Control_DragOver(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
@@ -430,7 +352,12 @@ namespace AIHelperApp
             e.Handled = true;
         }
 
-        private void Window_Drop(object sender, DragEventArgs e)
+        private void Control_DragLeave(object sender, DragEventArgs e)
+        {
+            DragDropOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void Control_Drop(object sender, DragEventArgs e)
         {
             DragDropOverlay.Visibility = Visibility.Collapsed;
 
@@ -471,7 +398,7 @@ namespace AIHelperApp
                 }
                 catch (Exception ex)
                 {
-                    AddMessage("system", $"⚠️ Ошибка вставки из буфера: {ex.Message}");
+                    AddMessage("system", $"⚠️ Ошибка вставки: {ex.Message}");
                 }
             }
             else if (Clipboard.ContainsFileDropList())
@@ -490,7 +417,7 @@ namespace AIHelperApp
 
         #region ═══ EVENT HANDLERS ═══
 
-        private void ModelComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (ModelComboBox.SelectedItem != null)
                 _selectedModel = ModelComboBox.SelectedItem.ToString();
@@ -527,14 +454,10 @@ namespace AIHelperApp
             AddMessage("assistant", "Начат новый диалог. Чем могу помочь?");
         }
 
-        /// <summary>
-        /// Многострочный ввод: Enter = новая строка, Ctrl+Enter = отправить
-        /// </summary>
         private void InputTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control)
             {
-                // Ctrl+Enter — отправить
                 SendMessage();
                 e.Handled = true;
             }
@@ -545,7 +468,11 @@ namespace AIHelperApp
                     PasteFromClipboard();
                     e.Handled = true;
                 }
-                // Если не картинка — стандартная вставка текста (не перехватываем)
+            }
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                AttachFile_Click(null, null);
+                e.Handled = true;
             }
         }
 
@@ -572,7 +499,7 @@ namespace AIHelperApp
                 ? new ObservableCollection<AttachedFile>(_pendingAttachments)
                 : null;
 
-            AddMessage("user", message ?? (hasAttachments ? $"[{_pendingAttachments.Count} файл(ов)]" : ""), currentAttachments);
+            AddMessage("user", message ?? $"[{_pendingAttachments.Count} файл(ов)]", currentAttachments);
 
             _cancellationTokenSource?.Cancel();
             _cancellationTokenSource = new CancellationTokenSource();
@@ -628,70 +555,5 @@ namespace AIHelperApp
         }
 
         #endregion
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // CONVERTERS
-    // ═══════════════════════════════════════════════════════════════════
-
-    public class BoolToAlignmentConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return (bool)value ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public class BoolToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return (value is bool b && b) ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    /// <summary>
-    /// Инвертированный BoolToVisibility: true → Collapsed, false → Visible
-    /// </summary>
-    public class InverseBoolToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return (value is bool b && b) ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public class FileSizeConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is long size)
-            {
-                if (size < 1024) return $"{size} B";
-                if (size < 1024 * 1024) return $"{size / 1024.0:F1} KB";
-                return $"{size / (1024.0 * 1024.0):F1} MB";
-            }
-            return "0 B";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
     }
 }
