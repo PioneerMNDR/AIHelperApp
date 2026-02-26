@@ -1,7 +1,7 @@
 ﻿<UserControl x:Class="AIHelperApp.Controls.ChatControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:AIHelperApp"
+             xmlns:local="clr-namespace:AIHelperApp.Data"
              xmlns:mdxaml="clr-namespace:MdXaml;assembly=MdXaml"
              AllowDrop="True"
              Drop="Control_Drop"
