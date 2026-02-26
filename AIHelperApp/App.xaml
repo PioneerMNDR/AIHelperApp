@@ -1,0 +1,23 @@
+﻿<Application x:Class="AIHelperApp.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:data="clr-namespace:AIHelperApp.Data"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:controls="clr-namespace:AIHelperApp.Controls"
+             StartupUri="ChatWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Подключение стилей WPF UI для Fluent Design -->
+                <ui:ThemesDictionary Theme="Dark" />
+                <ui:ControlsDictionary />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Ваш конвертер -->
+            <data:AlignmentConverter x:Key="AlignmentConverter"/>
+
+
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

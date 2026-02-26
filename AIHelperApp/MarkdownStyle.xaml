@@ -1,0 +1,65 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:mdxaml="clr-namespace:MdXaml;assembly=MdXaml"
+                    xmlns:controls="clr-namespace:AIHelperApp.Controls">
+
+    <!-- Стиль для сообщений AI (светлый текст) -->
+    <Style x:Key="AiMarkdownStyle" TargetType="mdxaml:MarkdownScrollViewer">
+        <Setter Property="MarkdownStyleName" Value="SasabuneStandard"/>
+        <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="#cdd6f4"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+
+    <!-- Стиль для сообщений пользователя (тёмный текст) -->
+    <Style x:Key="UserMarkdownStyle" TargetType="mdxaml:MarkdownScrollViewer">
+        <Setter Property="MarkdownStyleName" Value="SasabuneStandard"/>
+        <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="#1e1e2e"/>
+        <Setter Property="FontSize" Value="14"/>
+    </Style>
+
+    
+    <Style TargetType="{x:Type controls:TabControlEx}" BasedOn="{StaticResource {x:Type TabControl}}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:TabControlEx}">
+                    <Grid KeyboardNavigation.TabNavigation="Local" 
+                      Background="{TemplateBinding Background}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Заголовки вкладок -->
+                        <TabPanel x:Name="HeaderPanel"
+                              Grid.Row="0"
+                              Panel.ZIndex="1"
+                              IsItemsHost="True"
+                              KeyboardNavigation.TabIndex="1"
+                              Background="Transparent"/>
+
+                        <!-- Контент вкладок - все вкладки живут здесь! -->
+                        <Border x:Name="ContentPanel"
+                            Grid.Row="1"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Background="{TemplateBinding Background}"
+                            KeyboardNavigation.DirectionalNavigation="Contained"
+                            KeyboardNavigation.TabIndex="2"
+                            KeyboardNavigation.TabNavigation="Local">
+
+                            <!-- Ключевой элемент: Grid хранит ВСЕ вкладки -->
+                            <Grid x:Name="PART_ItemsHolder"/>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
