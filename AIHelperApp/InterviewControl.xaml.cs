@@ -21,6 +21,8 @@ namespace AIHelperApp.Controls
         private VoiceActivityDetector _userVad;
         private WhisperTranscriptionService _whisperService;
         private InterviewAiService _aiService;
+
+        private GlobalHotkeyService? _hotkeyService;
         // ═══ Session ═══
         private InterviewSession _session;
         private readonly Stopwatch _sessionStopwatch = new();
@@ -113,8 +115,21 @@ namespace AIHelperApp.Controls
 
             // ═══ Инициализация UI настроек провайдера ═══
             InitializeAiProviderUI();
-
+            InitializeHotkeys();
             await _aiService.InitializeAsync();
+        }
+
+        private void InitializeHotkeys()
+        {
+            _hotkeyService = new GlobalHotkeyService();
+
+            _hotkeyService.OnAnswerHotkey += () => HandleAnswerHotkey();
+            _hotkeyService.OnToggleRecordHotkey += () => ToggleRecording();
+            _hotkeyService.OnTogglePauseHotkey += () => TogglePause();
+            _hotkeyService.OnScreenshotHotkey += () => HandleScreenshotHotkey();
+            _hotkeyService.OnScreenshotToAiHotkey += () => HandleScreenshotToAiHotkey();
+
+            _hotkeyService.RegisterHotkeys();
         }
 
         private void InitializeAiProviderUI()
@@ -418,6 +433,8 @@ namespace AIHelperApp.Controls
                 _aiService = null;
             }
             SaveAiSettings();
+            _hotkeyService?.Dispose();
+            _hotkeyService = null;
             _screenshotService?.Dispose();
             _screenshotService = null;
         }
@@ -1046,19 +1063,7 @@ namespace AIHelperApp.Controls
                 ElapsedRun.Text = "00:00";
             }
         }
-        /// <summary>
-        /// Кратковременная подсветка кнопки как обратная связь
-        /// </summary>
-        private async void FlashButton(Wpf.Ui.Controls.Button button)
-        {
-            var originalBackground = button.Background;
-            button.Background = new SolidColorBrush(
-                (Color)ColorConverter.ConvertFromString("#4089b4fa"));
-
-            await System.Threading.Tasks.Task.Delay(200);
-
-            button.Background = originalBackground;
-        }
+ 
         private void AddSystemSegment(string text)
         {
             var segment = new TranscriptSegment
@@ -1376,6 +1381,187 @@ namespace AIHelperApp.Controls
                 {
                     Debug.WriteLine($"[Screenshot] Failed to copy path: {ex.Message}");
                 }
+            }
+        }
+
+        // InterviewControl.cs - улучшенный FlashButton
+
+        /// <summary>
+        /// Кратковременная подсветка кнопки как обратная связь
+        /// </summary>
+        private async void FlashButton(Wpf.Ui.Controls.Button button)
+        {
+            if (button == null) return;
+
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                var originalBackground = button.Background;
+                var flashColor = (Color)ColorConverter.ConvertFromString("#6089b4fa");
+
+                // Анимация вспышки
+                button.Background = new SolidColorBrush(flashColor);
+
+                // Небольшое увеличение (эффект нажатия)
+                var originalTransform = button.RenderTransform;
+                button.RenderTransformOrigin = new Point(0.5, 0.5);
+                button.RenderTransform = new ScaleTransform(1.05, 1.05);
+
+                await Task.Delay(150);
+
+                button.Background = originalBackground;
+                button.RenderTransform = originalTransform ?? Transform.Identity;
+            });
+        }
+
+        /// <summary>
+        /// Визуальный индикатор нажатия хоткея (overlay flash)
+        /// </summary>
+        private async void ShowHotkeyFlash(string hotkeyName)
+        {
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                // Можно добавить временный overlay с названием хоткея
+                // Например: "F2 → AI" появляется на 500ms и исчезает
+
+                // Простой вариант - обновить статус
+                var originalStatus = RecordingStatusText.Text;
+                RecordingStatusText.Text = $"⌨️ {hotkeyName}";
+                RecordingStatusText.Foreground = BrushBlue;
+
+                await Task.Delay(500);
+
+                RecordingStatusText.Text = originalStatus;
+                UpdateRecordingUI(); // Восстановить правильный цвет
+            });
+        }
+        // ═══════════════════════════════════════════
+        //  PUBLIC API FOR HOTKEYS
+        // ═══════════════════════════════════════════
+
+        /// <summary>
+        /// Проверяет, активна ли запись (для условного выполнения хоткеев)
+        /// </summary>
+        public bool IsRecordingActive => _session?.IsRecording == true && !_session.IsPaused;
+
+        /// <summary>
+        /// Проверяет, идёт ли сессия (запись или пауза)
+        /// </summary>
+        public bool IsSessionActive => _session?.IsRecording == true;
+
+        /// <summary>
+        /// Переключает состояние записи (F3)
+        /// Если не записываем - начинает, если записываем - останавливает
+        /// </summary>
+        public void ToggleRecording()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_session == null) return;
+
+                if (_session.IsRecording)
+                {
+                    StopRecording();
+                    FlashButton(StopButton);
+                }
+                else
+                {
+                    StartRecording();
+                    FlashButton(RecButton);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Переключает паузу (F4)
+        /// Работает только при активной записи
+        /// </summary>
+        public void TogglePause()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_session == null || !_session.IsRecording) return;
+
+                if (_session.IsPaused)
+                {
+                    ResumeRecording();
+                }
+                else
+                {
+                    PauseRecording();
+                }
+
+                FlashButton(PauseButton);
+            });
+        }
+
+        /// <summary>
+        /// Делает скриншот (F5)
+        /// Работает только при активной записи
+        /// </summary>
+        public void HandleScreenshotHotkey()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_session == null || !_session.IsRecording || _session.IsPaused)
+                {
+                    Debug.WriteLine("[Hotkey] F5 ignored - not recording");
+                    return;
+                }
+
+                TakeScreenshot(sendToAI: false);
+            });
+        }
+
+        /// <summary>
+        /// Делает скриншот и сразу отправляет в AI (Shift+F5)
+        /// Работает только при активной записи
+        /// </summary>
+        public void HandleScreenshotToAiHotkey()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_session == null || !_session.IsRecording || _session.IsPaused)
+                {
+                    Debug.WriteLine("[Hotkey] Shift+F5 ignored - not recording");
+                    return;
+                }
+
+                TakeScreenshot(sendToAI: true);
+            });
+        }
+
+        /// <summary>
+        /// Отправляет в AI (F2)
+        /// Работает при активной записи или паузе
+        /// </summary>
+        public async void HandleAnswerHotkey()
+        {
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                if (_session == null || !_session.IsRecording)
+                {
+                    Debug.WriteLine("[Hotkey] F2 ignored - no active session");
+                    return;
+                }
+
+                FlashButton(AnswerButton);
+                await TriggerAiResponseAsync();
+            });
+        }
+
+        /// <summary>
+        /// Воспроизводит короткий звук обратной связи (опционально)
+        /// </summary>
+        private void PlayHotkeyFeedback()
+        {
+            try
+            {
+                // Тихий системный звук
+                System.Media.SystemSounds.Asterisk.Play();
+            }
+            catch
+            {
+                // Игнорируем ошибки звука
             }
         }
 

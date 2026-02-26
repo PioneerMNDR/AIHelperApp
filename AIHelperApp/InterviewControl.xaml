@@ -561,7 +561,7 @@
            Icon="{ui:SymbolIcon Brain24}"
            Content="Ответить F2"
            Click="AnswerButton_Click"
-           IsEnabled="False" 
+           IsEnabled="False"  Background="WhiteSmoke"
            ToolTipService.ToolTip="Отправить в AI (F2)"
            Margin="0,0,6,0"/>
 
@@ -647,7 +647,7 @@
 
                         <Border Width="1" Background="{ui:ThemeResource ControlStrokeColorDefaultBrush}" Margin="0,2,12,2"/>
 
-                        <!-- Обновлённый LLM статус -->
+                        <!-- Обновлённый Qwen статус -->
                         <TextBlock FontSize="11" VerticalAlignment="Center">
             <Run Text="LLM:" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"/>
             <Run x:Name="QwenStatusRun" Text=" —" Foreground="{ui:ThemeResource TextFillColorTertiaryBrush}"/>
